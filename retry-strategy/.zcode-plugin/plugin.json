@@ -1,0 +1,7 @@
+{
+  "name": "retry-strategy",
+  "version": "0.1.2",
+  "description": "切换 ZCode 模型请求重试策略（标准/激进），并在启动时自动保持所选策略",
+  "author": { "name": "Xuanranzzz" },
+  "commands": "./commands"
+}

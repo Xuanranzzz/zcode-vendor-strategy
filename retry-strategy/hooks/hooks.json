@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/apply-retry.mjs", "auto"],
+            "timeoutMs": 30000,
+            "statusMessage": "保持重试策略（标准/激进）"
+          }
+        ]
+      }
+    ]
+  }
+}

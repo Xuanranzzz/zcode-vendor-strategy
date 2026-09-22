@@ -1,0 +1,15 @@
+{
+  "name": "dev-retry-strategy",
+  "plugins": [
+    {
+      "name": "retry-strategy",
+      "source": "./retry-strategy",
+      "version": "0.1.2",
+      "description": "切换 ZCode 模型请求重试策略（标准/激进），并在启动时自动保持所选策略",
+      "displayName": "Retry Strategy",
+      "displayName_i18n": { "zh-CN": "重试策略" },
+      "description_i18n": { "zh-CN": "在「标准/激进」重试策略之间切换 zcode.cjs 的模型请求重试参数，并在每次启动时自动保持所选策略。" },
+      "category": "developer-tools"
+    }
+  ]
+}
