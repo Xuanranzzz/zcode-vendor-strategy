@@ -8,7 +8,7 @@
  *   - optional 片段只在部分构建中存在（缺失时跳过，不算异常）。
  *
  * ZCode 每次重新打包都会改掉压缩后的标识符（函数名/变量名），所以新增构建时
- * 需要按《ZCode重试策略修改说明》第十节重新提取锚点，再加一组 BUILDS 条目。
+ * 需要按《ZCode重试策略修改说明》第九节重新提取锚点，再加一组 BUILDS 条目。
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -36,11 +36,30 @@ const QUOTA_CODES =
 const quotaSetStd = (v) => `${v}=new Set([${QUOTA_CODES}])`;
 const quotaSetAgg = (v) => `${v}=new Set([])`;
 
-/** 内联限流错误码条目（模型限流，新构建里独立成条且 retryable=false）。 */
-const inlineRateLimited = (code, retryable) =>
-  `["${code}",{code:Rs.ModelRateLimited,reason:vs.RateLimited,retryReason:el.RateLimited,retryable:${retryable}}]`;
+/** 内联限流错误码条目（模型限流，新构建里独立成条且 retryable=false）。
+ *  enums 为各构建的压缩枚举命名空间：2026-09-22 / 2026-10-10 为 Rs/vs/el，2026-10-19 为 as/bs/tl。 */
+const inlineRateLimited = (code, retryable, enums = { code: 'Rs', reason: 'vs', retryReason: 'el' }) =>
+  `["${code}",{code:${enums.code}.ModelRateLimited,reason:${enums.reason}.RateLimited,retryReason:${enums.retryReason}.RateLimited,retryable:${retryable}}]`;
 
-// ---------- 构建 2026-10-10（当前版本，zcode.cjs 15,126,820 字节） ----------
+// ---------- 构建 2026-10-19（当前版本，zcode.cjs 15,243,891 字节） ----------
+
+const C = {
+  enums: { code: 'as', reason: 'bs', retryReason: 'tl' },
+  // 延迟计算函数：原按 baseDelayMs × backoffFactor^(t-1) 指数退避 + 抖动
+  delayStd:
+    'function _ie(e,t,n){let o=e.baseDelayMs*e.backoffFactor**Math.max(0,t-1),i=Math.min(o,e.maxDelayMs);return CHs(n,o)?n:!e.jitter||i===0?i:Math.round(i*(.5+Math.random()*.5))}',
+  delayAgg: 'function _ie(e,t,n){let s=Math.min(Math.max(0,t),5)*1e3;return Math.min(CHs(n,s)?n:s,5e3)}',
+  // 默认重试参数（maxAttempts 含首次请求，1001 = 1000 次重试）
+  paramsStd: '$Le={backoffFactor:2,baseDelayMs:2e3,jitter:!0,maxAttempts:11,maxDelayMs:6e4};',
+  paramsAgg: '$Le={backoffFactor:1,baseDelayMs:1e3,jitter:!1,maxAttempts:1001,maxDelayMs:5e3};',
+  // 配额类错误分类（被 14 个配额错误码共用；X9s 是预置的可重试变体，勿混淆）
+  quotaClassStd: 'Z9s={code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!1}',
+  quotaClassAgg: 'Z9s={code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!0}',
+  quotaSetStd: quotaSetStd('FHs'),
+  quotaSetAgg: quotaSetAgg('FHs'),
+};
+
+// ---------- 构建 2026-10-10（上一版本，zcode.cjs 15,126,820 字节，保留兼容） ----------
 
 const N = {
   // 延迟计算函数：原按 baseDelayMs × backoffFactor^(t-1) 指数退避 + 抖动
@@ -79,6 +98,20 @@ const O = {
 // ---------- 构建表（新构建在前；识别时取匹配数最多的一组） ----------
 
 export const BUILDS = [
+  {
+    id: '2026-10-19',
+    note: 'ZCode 2026-10-19 构建（zcode.cjs 15,243,891 字节，函数名 _ie/$Le/Z9s/FHs，枚举 as/bs/tl）',
+    segments: [
+      { name: '延迟计算函数', std: C.delayStd, agg: C.delayAgg },
+      { name: '默认重试参数', std: C.paramsStd, agg: C.paramsAgg },
+      { name: '配额错误分类', std: C.quotaClassStd, agg: C.quotaClassAgg },
+      { name: '配额码短路集合', std: C.quotaSetStd, agg: C.quotaSetAgg },
+      // 限流码 1308/1310/1313 仍是独立内联条目（retryable=false），枚举命名空间本轮换成 as/bs/tl
+      { name: '限流码 1308', std: inlineRateLimited('1308', '!1', C.enums), agg: inlineRateLimited('1308', '!0', C.enums), optional: true },
+      { name: '限流码 1310', std: inlineRateLimited('1310', '!1', C.enums), agg: inlineRateLimited('1310', '!0', C.enums), optional: true },
+      { name: '限流码 1313', std: inlineRateLimited('1313', '!1', C.enums), agg: inlineRateLimited('1313', '!0', C.enums), optional: true },
+    ],
+  },
   {
     id: '2026-10-10',
     note: 'ZCode 2026-10-10 构建（zcode.cjs 15,126,820 字节，函数名 Moe/PNe/Aqs/hHs）',

@@ -32,7 +32,7 @@ zcode-vendor-strategy/
     ├── hooks/hooks.json                # SessionStart 钩子（启动时自动保持策略）
     ├── scripts/apply-retry.mjs         # 命令行入口（apply / auto / status）
     ├── scripts/retry-patch.mjs         # 补丁锚点表 + 构建识别 + 替换逻辑
-    ├── scripts/selftest.mjs            # 离线自测（两种构建的往返与幂等）
+    ├── scripts/selftest.mjs            # 离线自测（各构建的往返与幂等）
     └── README.md                       # 插件内说明
 ```
 
@@ -46,7 +46,7 @@ zcode-vendor-strategy/
 ## 使用
 
 1. 在输入框输入 `/retry-strategy`（或直接 `/retry-strategy 激进`），按提示选择「标准」或「激进」；
-2. 脚本会先识别目标 `zcode.cjs` 是哪个 ZCode 构建，再做精确字符串替换（当前 2026-10-10 构建为 4 处必需 + 3 处可选），写入前做编译级语法校验、失败自动回滚；
+2. 脚本会先识别目标 `zcode.cjs` 是哪个 ZCode 构建，再做精确字符串替换（当前 2026-10-19 构建为 4 处必需 + 3 处可选），写入前做编译级语法校验、失败自动回滚；
 3. **重启 ZCode 后生效**（正在运行的进程内存里仍是旧代码）；
 4. 之后每次启动 ZCode，SessionStart 钩子自动保持所选策略。
 
@@ -75,7 +75,7 @@ node scripts/apply-retry.mjs status                        [--file <路径>]   #
 
 ## 开发与迭代
 
-1. 补丁锚点与替换逻辑在 `retry-strategy/scripts/retry-patch.mjs`（按 ZCode 构建分组，对应 `docs/ZCode重试策略修改说明.md` 第八节）；
+1. 补丁锚点与替换逻辑在 `retry-strategy/scripts/retry-patch.mjs`（按 ZCode 构建分组，对应 `docs/ZCode重试策略修改说明.md` 第九节）；
 2. 改完先跑离线自测：`node retry-strategy/scripts/selftest.mjs`（不需要安装 ZCode，验证各构建的往返逐字节一致与幂等）；
 3. 同步递增 `retry-strategy/.zcode-plugin/plugin.json` 和 `marketplace.json` 里的版本号；
 4. 提交推送；在 ZCode **市场源**里刷新市场，再到**个人**页点击**更新**。

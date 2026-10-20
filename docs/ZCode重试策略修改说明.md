@@ -1,7 +1,7 @@
 # ZCode 重试策略修改说明
 
 > 用途：记录 ZCode 工具（桌面客户端内置的 agent 运行时）模型请求重试策略的修改位置、改动内容与验证方法，便于后续再次调整。
-> 最近修改日期：2026-10-13（第八节：适配 2026-10-10 构建）
+> 最近修改日期：2026-10-20（第九节：适配 2026-10-19 构建）
 > 说明：本仓库另有 `retry-strategy` 插件（`/retry-strategy` 命令）实现同样的标准/激进切换；本文档记录底层原理与手工修改参考。
 
 ---
@@ -370,3 +370,103 @@ node retry-strategy/scripts/apply-retry.mjs apply standard
 ```
 
 无需备份文件：各片段互为逆操作，脚本内建唯一匹配校验，状态不明会拒绝修改。还原后文件字节数应为 **15,126,820**，**同样需要重启 ZCode**。
+
+
+## 九、2026-10-19 构建适配（v0.3）
+
+> 适配日期：2026-10-20。目标文件：`<ZCode安装目录>\resources\glm\zcode.cjs`，构建时间 2026-10-19 20:51:20，15,243,891 字节（字符数 15,241,826）。
+
+### 9.1 为什么 v0.2 的 7 处锚点全部失效
+
+ZCode 再次重新打包，压缩后的标识符又一次全部改名，v0.2（2026-10-10 构建）的锚点一个都匹配不到（插件安全报错「未能识别当前 ZCode 构建」并拒绝修改）。与上次不同，这次连**枚举命名空间**都换了（`Rs/vs/el` → `as/bs/tl`）：
+
+| 旧名（2026-10-10） | 新名（2026-10-19） |
+|---|---|
+| `Moe`（延迟计算，辅助函数 `iHs`） | `_ie`（辅助函数 `CHs`） |
+| `PNe`（默认重试参数） | `$Le` |
+| `Aqs`（配额错误分类） | `Z9s`（预置的可重试变体是 `X9s`，注意区分） |
+| `hHs`（配额码短路集合） | `FHs` |
+| 枚举 `Rs` / `vs` / `el` | 枚举 `as` / `bs` / `tl` |
+
+结构上与 2026-10-10 构建完全一致：全文 `baseDelayMs*` 只有 1 处（即 `_ie` 一个延迟实现）；子代理瞬态退避（`nWo`/`wWa`/`kWa`）仍不存在；1308/1310/1313 三个限流码仍是独立内联条目且 `retryable:!1`；`1005` 仍归类 `InvalidRequest`、`1304`/`3008`/`3009`/`3010` 仍为 ZCode 显式策略。所以改动仍是 **4 处必需 + 3 处可选**。
+
+### 9.2 四处必需改动
+
+**（1）延迟计算函数 `_ie`**（偏移 4,136,157，全文唯一）
+
+改前：
+```js
+function _ie(e,t,n){let o=e.baseDelayMs*e.backoffFactor**Math.max(0,t-1),i=Math.min(o,e.maxDelayMs);return CHs(n,o)?n:!e.jitter||i===0?i:Math.round(i*(.5+Math.random()*.5))}
+```
+
+改后：
+```js
+function _ie(e,t,n){let s=Math.min(Math.max(0,t),5)*1e3;return Math.min(CHs(n,s)?n:s,5e3)}
+```
+
+含义同 8.2（1）：第 t 次重试等 t 秒、第 5 次起恒等 5 秒，外层 `Math.min(...,5e3)` 把服务端 `Retry-After` 头也压回 5s。
+
+**（2）默认重试参数 `$Le`**（偏移 3,853,548）
+
+改前：`$Le={backoffFactor:2,baseDelayMs:2e3,jitter:!0,maxAttempts:11,maxDelayMs:6e4};`
+改后：`$Le={backoffFactor:1,baseDelayMs:1e3,jitter:!1,maxAttempts:1001,maxDelayMs:5e3};`
+
+含义同 8.2（2）：`maxAttempts:1001` = 首次请求 + 1000 次重试。
+
+**（3）配额错误分类 `Z9s`**（偏移 4,046,965）
+
+改前：`Z9s={code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!1}`
+改后：`Z9s={code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!0}`
+
+含义同 8.2（3）：`Z9s` 是分类表里 14 个配额错误码的共同分类；注意 `X9s` 是预置的可重试变体（`rate_limit_reached_error` 等使用），别把 `Z9s` 的替换字符串写成 `X9s`。
+
+**（4）配额码短路集合 `FHs`**（偏移 4,147,799）
+
+改前：`FHs=new Set(["1005","1308","1310","1313","1316","1317","1318","1319","1320","1321","2056","20097","insufficient_quota","credit_balance_exhausted","organization_spend_limit_exceeded","project_spend_limit_exceeded","organization_usage_limit_exceeded","exceeded_current_quota_error"])`
+改后：`FHs=new Set([])`
+
+含义同 8.2（4）：`xpt` 的第二个分支 `t!==void 0&&FHs.has(t)?{decision:"stop",kind:"quota"}` 优先级高于一切分类，清空后这些错误码才会继续往下走、进入分类判定。
+
+（3）和（4）缺一不可，调用链同 8.2：预算为 Unbounded 时 `Tpt` 走 `xpt`（决策函数，含 `FHs` 短路门），否则走主代理路径 `Bro`（读 `retryable`）。
+
+### 9.3 三处可选改动：补回 1308 / 1310 / 1313
+
+同 8.3 的来龙去脉，本版只是枚举名换成 `as/bs/tl`：
+
+```js
+["1308",{code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!1}]  →  retryable:!0
+["1310",{code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!1}]  →  retryable:!0
+["1313",{code:as.ModelRateLimited,reason:bs.RateLimited,retryReason:tl.RateLimited,retryable:!1}]  →  retryable:!0
+```
+
+`1005` 保持 `!1`（`InvalidRequest`）；`3008`/`3009`/`3010`/`1304` 不动，理由同 8.3。
+
+### 9.4 生效后的重试时间轴
+
+同 8.4：1-2-3-4-5s 线性、封顶 5s、无抖动、最多 1000 次重试（长期性问题最坏约 83 分钟后放弃）。
+
+### 9.5 验证记录（2026-10-20 实测）
+
+| # | 检查项 | 结果 |
+|---|---|---|
+| 1 | 应用前 `status` | `currentStrategy:"standard"`、`detectedBuild:"2026-10-19"`，7 个锚点 std 计数均为 1 |
+| 2 | `apply aggressive` | 7 处替换全部成功，`vm.Script` 编译校验通过 |
+| 3 | 文件字节数 | 15,243,891 → **15,243,544**（净 −347，与 2026-10-10 构建的 −347 一致） |
+| 4 | 重复 `apply aggressive` | `changed:false`，幂等，未二次写入 |
+| 5 | 往返 `apply standard` | 回到 15,243,891 字节，SHA256 与原文件**逐字节一致**（`A055234A…AE0DE1`） |
+| 6 | 还原后再次 `apply aggressive` | 回到 15,243,544（SHA256 `37AAC175…46B22`） |
+| 7 | `node --check zcode.cjs` | 退出码 0 |
+| 8 | 邻近代码完整性 | `xpt` 短路门、`Tpt`、`this.retry=jQr(t.retry,this.env)`、4 个 `ZCODE_MODEL_RETRY_*` 环境变量名均原样完好 |
+| 9 | 离线自测 | `node retry-strategy/scripts/selftest.mjs`：三种构建 37 项断言全部通过 |
+
+### 9.6 ZCode 再次更新时怎么办
+
+同 8.6：每次重新打包都会改名（有时连枚举命名空间都换），找到新锚点后在 `retry-strategy/scripts/retry-patch.mjs` 的 `BUILDS` **最前面**加一组即可，旧构建条目保留不动。定位锚点的方法见 8.6（搜 `backoffFactor:2,baseDelayMs:2e3` / `baseDelayMs*` / `retryable:!1}"]` / `insufficient_quota"`），注意分类表与短路集合里的枚举名随构建变化。
+
+### 9.7 如何还原
+
+```powershell
+node retry-strategy/scripts/apply-retry.mjs apply standard
+```
+
+还原后文件字节数应为 **15,243,891**，同样需要重启 ZCode。
